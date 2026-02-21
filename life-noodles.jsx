@@ -20,7 +20,7 @@ const INITIAL_MILESTONES = [
   { id: 4, name: 'Marathon Training', category: 'Health', startMonth: 1, startYear: 2020, endMonth: 10, endYear: 2020, ongoing: false, hypothetical: false, subEvents: [] }
 ];
 
-export default function LifeRibbons() {
+export default function LifeNoodles() {
   const [milestones, setMilestones] = useState(INITIAL_MILESTONES);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [showForm, setShowForm] = useState(false);
@@ -835,7 +835,7 @@ export default function LifeRibbons() {
         }
       } catch (error) {
         console.error('Import error:', error);
-        alert('Error importing file. Please ensure it\'s a valid Life Ribbons CSV or JSON file.');
+        alert('Error importing file. Please ensure it\'s a valid Life Noodles CSV or JSON file.');
       }
     };
     
@@ -1522,7 +1522,7 @@ export default function LifeRibbons() {
           marginBottom: '0.5rem',
           letterSpacing: '-0.02em'
         }}>
-          Life Ribbons
+          Life Noodles
         </h1>
         
         <div className="header-buttons" style={{ display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1919,7 +1919,7 @@ export default function LifeRibbons() {
                 fontWeight: 700,
                 margin: 0
               }}>
-                Welcome to Life Ribbons
+                Welcome to Life Noodles
               </h2>
               <button
                 onClick={() => setShowInstructions(false)}
@@ -1944,10 +1944,10 @@ export default function LifeRibbons() {
 
             <div style={{ lineHeight: '1.8', color: '#4B5563', fontSize: '1rem' }}>
               <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#1F2937', marginTop: '0', marginBottom: '0.75rem' }}>
-                🎯 Why Life Ribbons?
+                🎯 Why Life Noodles?
               </h3>
               <p style={{ marginBottom: '1rem' }}>
-                Life Ribbons was created as a way to <strong>visualize time commitment over time</strong>. It supplements the Yerkes-Dodson Law—the idea that peak performance is a balance between being stimulated and not over-stimulated. This tool helps you:
+                Life Noodles was created as a way to <strong>visualize time commitment over time</strong>. It supplements the Yerkes-Dodson Law—the idea that peak performance is a balance between being stimulated and not over-stimulated. This tool helps you:
               </p>
               <ul style={{ marginBottom: '1.5rem', paddingLeft: '1.5rem' }}>
                 <li>See your life commitments at a glance</li>
