@@ -4161,12 +4161,15 @@ function LifeNoodles() {
           body {
             font-size: 14px;
           }
+          main {
+            padding: 0 !important;
+          }
           
           /* Stack layout vertically on mobile */
           .responsive-container {
             flex-direction: column !important;
-            gap: 1.5rem !important;
-            padding: 0 0.5rem !important;
+            gap: 0 !important;
+            padding: 0 !important;
           }
           
           /* Full width sidebar on mobile - always on top */
@@ -4184,9 +4187,10 @@ function LifeNoodles() {
           
           /* Timeline adjustments */
           .responsive-timeline {
-            padding: 1.5rem 1rem !important;
-            overflow-x: scroll !important;
-            border-radius: 20px !important;
+            padding: 0.5rem 0 !important;
+            overflow-x: hidden !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
           }
           
           /* Category boxes - more compact */
