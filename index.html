@@ -85,6 +85,8 @@ function LifeNoodles() {
   const [editCategoryName, setEditCategoryName] = useState('');
   const [editCategoryColor, setEditCategoryColor] = useState('#3B82F6');
   const [formError, setFormError] = useState('');
+  const [showMobileCategories, setShowMobileCategories] = useState(false);
+  const [showMobileDetails, setShowMobileDetails] = useState(false);
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -1538,9 +1540,36 @@ function LifeNoodles() {
           .timeline-container {
             padding: 1rem 0.5rem !important;
           }
-          
+
           .category-box, .ribbon-details {
             padding: 1rem !important;
+          }
+        }
+
+        /* Mobile FAB — hidden on desktop */
+        .mobile-fab-container {
+          display: none;
+          position: fixed;
+          bottom: 1.5rem;
+          right: 1.5rem;
+          flex-direction: column;
+          gap: 0.75rem;
+          z-index: 1000;
+          align-items: center;
+        }
+
+        /* Mobile layout (≤768px): timeline fills screen, sidebar hidden */
+        @media (max-width: 768px) {
+          .responsive-sidebar {
+            display: none !important;
+          }
+          .responsive-container {
+            flex-direction: column !important;
+            gap: 0 !important;
+            padding: 0 !important;
+          }
+          .mobile-fab-container {
+            display: flex !important;
           }
         }
       `}</style>
@@ -3653,6 +3682,160 @@ function LifeNoodles() {
         </div>
       </main>
 
+      {/* Mobile Floating Action Buttons */}
+      <div className="mobile-fab-container">
+        {selectedMilestone && (
+          <button
+            onClick={() => setShowMobileDetails(true)}
+            style={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: categories[selectedMilestone.category],
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: `0 4px 20px ${categories[selectedMilestone.category]}80`,
+              color: 'white'
+            }}
+            title="Milestone Details"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </button>
+        )}
+        <button
+          onClick={() => setShowMobileCategories(true)}
+          style={{
+            width: 52, height: 52, borderRadius: '50%',
+            background: '#4F46E5',
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
+            color: 'white'
+          }}
+          title="Categories"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile Categories Overlay */}
+      {showMobileCategories && (
+        <div
+          onClick={() => setShowMobileCategories(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1001, display: 'flex', alignItems: 'flex-end' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: 'white', borderRadius: '24px 24px 0 0', padding: '1.5rem', maxHeight: '75vh', overflowY: 'auto', animation: 'slideUpPanel 0.3s ease-out' }}
+          >
+            <div style={{ width: 40, height: 4, background: '#D1D5DB', borderRadius: 2, margin: '0 auto 1.25rem' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1F2937', fontWeight: 700 }}>Categories</h3>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={toggleAllCategories}
+                  style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '0.5rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', color: '#6B7280' }}
+                >
+                  {visibleCategories.length === Object.keys(categories).length ? 'Hide All' : 'Show All'}
+                </button>
+                <button
+                  onClick={() => { setShowMobileCategories(false); setShowCategoryManager(true); }}
+                  style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B7280' }}
+                  title="Manage Categories"
+                >
+                  <Edit2 size={16} />
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {Object.entries(categories).map(([cat, color]) => {
+                const count = milestones.filter(m => m.category === cat).length;
+                const isVisible = visibleCategories.includes(cat);
+                return (
+                  <div
+                    key={cat}
+                    onClick={() => toggleCategoryFilter(cat)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', borderRadius: 12, cursor: 'pointer', background: isVisible ? '#F9FAFB' : 'transparent', opacity: isVisible ? 1 : 0.5 }}
+                  >
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: isVisible ? color : '#D1D5DB', boxShadow: isVisible ? `0 4px 12px ${color}40` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {isVisible && <Check size={18} color="white" strokeWidth={3} />}
+                    </div>
+                    <span style={{ flex: 1, color: '#4B5563', fontWeight: 500 }}>{cat}</span>
+                    <span style={{ color: '#9CA3AF', fontSize: '0.875rem', fontWeight: 600 }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Milestone Details Overlay */}
+      {showMobileDetails && selectedMilestone && (
+        <div
+          onClick={() => setShowMobileDetails(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1001, display: 'flex', alignItems: 'flex-end' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: 'white', borderRadius: '24px 24px 0 0', padding: '1.5rem', maxHeight: '80vh', overflowY: 'auto', animation: 'slideUpPanel 0.3s ease-out', borderTop: `4px solid ${categories[selectedMilestone.category]}` }}
+          >
+            <div style={{ width: 40, height: 4, background: '#D1D5DB', borderRadius: 2, margin: '0 auto 1.25rem' }} />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: categories[selectedMilestone.category], marginBottom: '1rem', boxShadow: `0 8px 24px ${categories[selectedMilestone.category]}40` }} />
+            <h3 style={{ fontSize: '1.5rem', color: '#1F2937', marginBottom: '0.5rem', fontWeight: 700 }}>{selectedMilestone.name}</h3>
+            <p style={{ color: categories[selectedMilestone.category], fontWeight: 600, marginBottom: '1.25rem' }}>{selectedMilestone.category}</p>
+            <div style={{ background: '#F9FAFB', borderRadius: 12, padding: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                <Calendar size={16} /><span>Timeline</span>
+              </div>
+              <p style={{ color: '#1F2937', fontWeight: 600 }}>
+                {new Date(selectedMilestone.startYear, selectedMilestone.startMonth - 1).toLocaleString('default', { month: 'short', year: 'numeric' })}
+                {' → '}
+                {selectedMilestone.ongoing
+                  ? <span style={{ color: categories[selectedMilestone.category], fontStyle: 'italic' }}>Ongoing</span>
+                  : new Date(selectedMilestone.endYear, selectedMilestone.endMonth - 1).toLocaleString('default', { month: 'short', year: 'numeric' })
+                }
+              </p>
+            </div>
+            {selectedMilestone.subEvents && selectedMilestone.subEvents.length > 0 && (
+              <div style={{ background: '#F9FAFB', borderRadius: 12, padding: '1rem', marginBottom: '1rem' }}>
+                <div style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.75rem', fontWeight: 600 }}>Sub-Events ({selectedMilestone.subEvents.length})</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {selectedMilestone.subEvents.filter(se => se.name).sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month)).map(subEvent => (
+                    <div key={subEvent.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', background: 'white', borderRadius: 6, fontSize: '0.813rem' }}>
+                      <div style={{ width: 8, height: 8, transform: 'rotate(45deg)', background: categories[selectedMilestone.category], flexShrink: 0 }} />
+                      <span style={{ color: '#1F2937', fontWeight: 600, flex: 1 }}>{subEvent.name}</span>
+                      <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>{new Date(subEvent.year, subEvent.month - 1).toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={() => { setShowMobileDetails(false); handleEdit(selectedMilestone); }}
+                style={{ flex: 1, padding: '0.875rem', background: '#F3F4F6', color: '#4B5563', border: 'none', borderRadius: 12, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              >
+                <Edit2 size={16} /> Edit
+              </button>
+              <button
+                onClick={() => { setShowMobileDetails(false); handleDelete(selectedMilestone.id); }}
+                style={{ flex: 1, padding: '0.875rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 12, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CSS Animations */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
@@ -3693,6 +3876,11 @@ function LifeNoodles() {
             opacity: 1;
             transform: translateY(0) scale(1);
           }
+        }
+
+        @keyframes slideUpPanel {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
         }
         
         * {
