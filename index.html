@@ -66,10 +66,10 @@ const MAX_IMPORT_FILE_SIZE = 1024 * 1024; // 1 MB
 // Initial demo data (dates are relative to current year)
 const _cy = new Date().getFullYear();
 const INITIAL_MILESTONES = [
-  { id: 1, name: 'Graduate Degree', category: 'Education', startMonth: 9, startYear: _cy - 4, endMonth: 5, endYear: _cy, ongoing: false, hypothetical: false, subEvents: [] },
-  { id: 2, name: 'New Hobby', category: 'Hobby', startMonth: 3, startYear: _cy - 7, endMonth: 8, endYear: _cy - 3, ongoing: false, hypothetical: false, subEvents: [] },
-  { id: 3, name: 'Career Start', category: 'Career', startMonth: 6, startYear: _cy - 11, endMonth: 12, endYear: _cy - 7, ongoing: false, hypothetical: false, subEvents: [] },
-  { id: 4, name: 'Fitness Challenge', category: 'Health', startMonth: 1, startYear: _cy - 6, endMonth: 10, endYear: _cy - 5, ongoing: false, hypothetical: false, subEvents: [] }
+  { id: 1, name: 'Graduate Degree', category: 'Education', startMonth: 9, startYear: _cy - 4, endMonth: 5, endYear: _cy, ongoing: false, hypothetical: false, notes: '', subEvents: [] },
+  { id: 2, name: 'New Hobby', category: 'Hobby', startMonth: 3, startYear: _cy - 7, endMonth: 8, endYear: _cy - 3, ongoing: false, hypothetical: false, notes: '', subEvents: [] },
+  { id: 3, name: 'Career Start', category: 'Career', startMonth: 6, startYear: _cy - 11, endMonth: 12, endYear: _cy - 7, ongoing: false, hypothetical: false, notes: '', subEvents: [] },
+  { id: 4, name: 'Fitness Challenge', category: 'Health', startMonth: 1, startYear: _cy - 6, endMonth: 10, endYear: _cy - 5, ongoing: false, hypothetical: false, notes: '', subEvents: [] }
 ];
 
 function LifeNoodles() {
@@ -131,6 +131,7 @@ function LifeNoodles() {
     endYear: new Date().getFullYear(),
     ongoing: false,
     hypothetical: false,
+    notes: '',
     subEvents: []
   });
 
@@ -145,6 +146,7 @@ function LifeNoodles() {
       endYear: new Date().getFullYear(),
       ongoing: false,
       hypothetical: false,
+      notes: '',
       subEvents: []
     });
     setFormError('');
@@ -152,13 +154,22 @@ function LifeNoodles() {
     setEditingId(null);
   };
 
-  // Ensure all milestones have hypothetical field (migration for old data)
+  // Ensure all milestones have required fields (migration for old data)
   useEffect(() => {
-    const needsUpdate = milestones.some(m => m.hypothetical === undefined);
+    const needsUpdate = milestones.some(m =>
+      m.hypothetical === undefined ||
+      m.notes === undefined ||
+      (m.subEvents || []).some(se => se.completed === undefined)
+    );
     if (needsUpdate) {
       setMilestones(milestones.map(m => ({
         ...m,
-        hypothetical: m.hypothetical || false
+        hypothetical: m.hypothetical || false,
+        notes: m.notes || '',
+        subEvents: (m.subEvents || []).map(se => ({
+          ...se,
+          completed: se.completed || false
+        }))
       })));
     }
   }, []); // Only run once on mount
@@ -331,7 +342,8 @@ function LifeNoodles() {
       id: Date.now(),
       name: '',
       month: 1,
-      year: formData.startYear
+      year: formData.startYear,
+      completed: false
     };
     setFormData({
       ...formData,
@@ -352,6 +364,39 @@ function LifeNoodles() {
     setFormData({
       ...formData,
       subEvents: formData.subEvents.filter(se => se.id !== subEventId)
+    });
+  };
+
+  const toggleSubEventComplete = (milestoneId, subEventId) => {
+    setMilestones(prev => prev.map(m =>
+      m.id === milestoneId
+        ? { ...m, subEvents: m.subEvents.map(se =>
+            se.id === subEventId ? { ...se, completed: !se.completed } : se
+          )}
+        : m
+    ));
+  };
+
+  // Render notes text with basic bold (**text**) and bullet (- item) formatting
+  const renderNotes = (text) => {
+    if (!text || !text.trim()) return null;
+    const renderInline = (str) => {
+      const parts = str.split(/(\*\*[^*]+\*\*)/);
+      return parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**')
+          ? React.createElement('strong', { key: i }, part.slice(2, -2))
+          : part
+      );
+    };
+    return text.split('\n').map((line, i) => {
+      if (line.startsWith('- ')) {
+        return React.createElement('div', { key: i, style: { display: 'flex', gap: '0.4rem', marginBottom: '0.2rem' } },
+          React.createElement('span', { style: { color: '#8B5CF6', flexShrink: 0, fontWeight: 700 } }, '•'),
+          React.createElement('span', null, renderInline(line.slice(2)))
+        );
+      }
+      if (!line.trim()) return React.createElement('div', { key: i, style: { height: '0.4rem' } });
+      return React.createElement('p', { key: i, style: { margin: '0 0 0.2rem 0' } }, renderInline(line));
     });
   };
 
@@ -629,14 +674,15 @@ function LifeNoodles() {
   const exportAsCSV = () => {
     try {
       // Convert to CSV format with milestones and categories
-      let csv = 'Milestone Name,Category,Start Month,Start Year,End Month,End Year,Ongoing,Hypothetical,Sub-Events\n';
-      
+      let csv = 'Milestone Name,Category,Start Month,Start Year,End Month,End Year,Ongoing,Hypothetical,Notes,Sub-tasks\n';
+
       milestones.forEach(m => {
-        const subEventsStr = m.subEvents && m.subEvents.length > 0 
-          ? m.subEvents.map(se => `${se.name} (${se.month}/${se.year})`).join('; ')
+        const subEventsStr = m.subEvents && m.subEvents.length > 0
+          ? m.subEvents.filter(se => se.name).map(se => `${se.name} (${se.month}/${se.year})${se.completed ? ' [done]' : ''}`).join('; ')
           : '';
-        
-        csv += `"${m.name}","${m.category}",${m.startMonth},${m.startYear},${m.endMonth || ''},${m.endYear || ''},${m.ongoing ? 'Yes' : 'No'},${m.hypothetical ? 'Yes' : 'No'},"${subEventsStr}"\n`;
+        const notesStr = (m.notes || '').replace(/"/g, '""');
+
+        csv += `"${m.name}","${m.category}",${m.startMonth},${m.startYear},${m.endMonth || ''},${m.endYear || ''},${m.ongoing ? 'Yes' : 'No'},${m.hypothetical ? 'Yes' : 'No'},"${notesStr}","${subEventsStr}"\n`;
       });
       
       // Add category definitions section
@@ -2443,7 +2489,64 @@ function LifeNoodles() {
                 </div>
               )}
 
-              {/* Sub-events Section */}
+              {/* Notes Section */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#4B5563', fontSize: '0.875rem', fontWeight: 500 }}>
+                  Notes (Optional)
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                  <button
+                    type="button"
+                    title="Bold — wrap selected text in **"
+                    onClick={() => {
+                      const ta = document.getElementById('milestone-notes-ta');
+                      if (!ta) return;
+                      const start = ta.selectionStart, end = ta.selectionEnd;
+                      const selected = formData.notes.slice(start, end);
+                      const before = formData.notes.slice(0, start);
+                      const after = formData.notes.slice(end);
+                      const newText = before + '**' + (selected || 'bold text') + '**' + after;
+                      setFormData({ ...formData, notes: newText });
+                      setTimeout(() => { ta.focus(); ta.setSelectionRange(start + 2, start + 2 + (selected || 'bold text').length); }, 0);
+                    }}
+                    style={{ padding: '0.25rem 0.625rem', fontSize: '0.875rem', fontWeight: 700, background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer', fontFamily: 'serif' }}
+                  >B</button>
+                  <button
+                    type="button"
+                    title="Bullet point — insert '- ' at line start"
+                    onClick={() => {
+                      const ta = document.getElementById('milestone-notes-ta');
+                      if (!ta) return;
+                      const pos = ta.selectionStart;
+                      const lineStart = formData.notes.lastIndexOf('\n', pos - 1) + 1;
+                      const newText = formData.notes.slice(0, lineStart) + '- ' + formData.notes.slice(lineStart);
+                      setFormData({ ...formData, notes: newText });
+                      setTimeout(() => { ta.focus(); ta.setSelectionRange(pos + 2, pos + 2); }, 0);
+                    }}
+                    style={{ padding: '0.25rem 0.625rem', fontSize: '0.875rem', fontWeight: 700, background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+                  >•</button>
+                </div>
+                <textarea
+                  id="milestone-notes-ta"
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder={'Add notes, reflections, or details...\nTip: use **bold** or - bullets'}
+                  maxLength={2000}
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    borderRadius: '12px',
+                    border: '2px solid #E5E7EB',
+                    fontSize: '0.875rem',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    lineHeight: 1.5
+                  }}
+                />
+              </div>
+
+              {/* Sub-tasks Section */}
               <div style={{
                 marginTop: '0.5rem',
                 padding: '1.25rem',
@@ -2453,7 +2556,7 @@ function LifeNoodles() {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <label style={{ color: '#4B5563', fontSize: '0.875rem', fontWeight: 600 }}>
-                    Sub-Events (Optional)
+                    Sub-tasks (Optional)
                   </label>
                   <button
                     type="button"
@@ -2485,7 +2588,7 @@ function LifeNoodles() {
                     {formData.subEvents.map((subEvent) => (
                       <div key={subEvent.id} style={{
                         display: 'grid',
-                        gridTemplateColumns: '2fr 1fr 1fr auto',
+                        gridTemplateColumns: '2fr 1fr 1fr auto auto',
                         gap: '0.5rem',
                         alignItems: 'end',
                         padding: '0.75rem',
@@ -2558,6 +2661,15 @@ function LifeNoodles() {
                             }}
                           />
                         </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', paddingBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#9CA3AF', fontWeight: 500 }}>Done</span>
+                          <input
+                            type="checkbox"
+                            checked={!!subEvent.completed}
+                            onChange={(e) => updateSubEvent(subEvent.id, 'completed', e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#8B5CF6' }}
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={() => removeSubEvent(subEvent.id)}
@@ -2582,14 +2694,14 @@ function LifeNoodles() {
                     ))}
                   </div>
                 ) : (
-                  <p style={{ 
-                    color: '#9CA3AF', 
+                  <p style={{
+                    color: '#9CA3AF',
                     fontSize: '0.813rem',
                     fontStyle: 'italic',
                     textAlign: 'center',
                     margin: '0.5rem 0'
                   }}>
-                    No sub-events yet. Click "Add" to create markers within this milestone.
+                    No sub-tasks yet. Click "Add" to create checkpoints within this milestone.
                   </p>
                 )}
               </div>
@@ -3681,7 +3793,7 @@ function LifeNoodles() {
                   </p>
                 </div>
 
-                {/* Sub-events list */}
+                {/* Sub-tasks list */}
                 {selectedMilestone.subEvents && selectedMilestone.subEvents.length > 0 && (
                   <div style={{
                     background: '#F9FAFB',
@@ -3689,24 +3801,20 @@ function LifeNoodles() {
                     padding: '1rem',
                     marginBottom: '1rem'
                   }}>
-                    <div style={{ 
+                    <div style={{
                       color: '#6B7280',
                       fontSize: '0.875rem',
                       marginBottom: '0.75rem',
                       fontWeight: 600
                     }}>
-                      Sub-Events ({selectedMilestone.subEvents.length})
+                      Sub-tasks ({selectedMilestone.subEvents.filter(se => se.name).length})
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {selectedMilestone.subEvents
                         .filter(se => se.name)
-                        .sort((a, b) => {
-                          const dateA = a.year * 12 + a.month;
-                          const dateB = b.year * 12 + b.month;
-                          return dateA - dateB;
-                        })
+                        .sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month))
                         .map(subEvent => (
-                          <div 
+                          <div
                             key={subEvent.id}
                             style={{
                               display: 'flex',
@@ -3715,17 +3823,32 @@ function LifeNoodles() {
                               padding: '0.5rem',
                               background: 'white',
                               borderRadius: '6px',
-                              fontSize: '0.813rem'
+                              fontSize: '0.813rem',
+                              cursor: 'pointer',
+                              opacity: subEvent.completed ? 0.65 : 1
                             }}
+                            onClick={() => toggleSubEventComplete(selectedMilestone.id, subEvent.id)}
+                            title="Click to toggle completion"
                           >
                             <div style={{
-                              width: '8px',
-                              height: '8px',
-                              transform: 'rotate(45deg)',
-                              background: categories[selectedMilestone.category],
-                              flexShrink: 0
-                            }} />
-                            <span style={{ color: '#1F2937', fontWeight: 600, flex: 1 }}>
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              border: `2px solid ${subEvent.completed ? '#8B5CF6' : '#D1D5DB'}`,
+                              background: subEvent.completed ? '#8B5CF6' : 'white',
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s'
+                            }}>
+                              {subEvent.completed && (
+                                <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                                  <path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{ color: '#1F2937', fontWeight: 600, flex: 1, textDecoration: subEvent.completed ? 'line-through' : 'none' }}>
                               {subEvent.name}
                             </span>
                             <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>
@@ -3733,6 +3856,23 @@ function LifeNoodles() {
                             </span>
                           </div>
                         ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes display */}
+                {selectedMilestone.notes && selectedMilestone.notes.trim() && (
+                  <div style={{
+                    background: '#F9FAFB',
+                    borderRadius: '12px',
+                    padding: '1rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <div style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.625rem', fontWeight: 600 }}>
+                      Notes
+                    </div>
+                    <div style={{ color: '#374151', fontSize: '0.875rem', lineHeight: 1.6 }}>
+                      {renderNotes(selectedMilestone.notes)}
                     </div>
                   </div>
                 )}
@@ -4052,15 +4192,31 @@ function LifeNoodles() {
             </div>
             {selectedMilestone.subEvents && selectedMilestone.subEvents.length > 0 && (
               <div style={{ background: '#F9FAFB', borderRadius: 12, padding: '1rem', marginBottom: '1rem' }}>
-                <div style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.75rem', fontWeight: 600 }}>Sub-Events ({selectedMilestone.subEvents.length})</div>
+                <div style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.75rem', fontWeight: 600 }}>
+                  Sub-tasks ({selectedMilestone.subEvents.filter(se => se.name).length})
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {selectedMilestone.subEvents.filter(se => se.name).sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month)).map(subEvent => (
-                    <div key={subEvent.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', background: 'white', borderRadius: 6, fontSize: '0.813rem' }}>
-                      <div style={{ width: 8, height: 8, transform: 'rotate(45deg)', background: categories[selectedMilestone.category], flexShrink: 0 }} />
-                      <span style={{ color: '#1F2937', fontWeight: 600, flex: 1 }}>{subEvent.name}</span>
+                    <div
+                      key={subEvent.id}
+                      onClick={() => toggleSubEventComplete(selectedMilestone.id, subEvent.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', background: 'white', borderRadius: 6, fontSize: '0.813rem', cursor: 'pointer', opacity: subEvent.completed ? 0.65 : 1 }}
+                    >
+                      <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${subEvent.completed ? '#8B5CF6' : '#D1D5DB'}`, background: subEvent.completed ? '#8B5CF6' : 'white', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                        {subEvent.completed && <svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span style={{ color: '#1F2937', fontWeight: 600, flex: 1, textDecoration: subEvent.completed ? 'line-through' : 'none' }}>{subEvent.name}</span>
                       <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>{new Date(subEvent.year, subEvent.month - 1).toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+            {selectedMilestone.notes && selectedMilestone.notes.trim() && (
+              <div style={{ background: '#F9FAFB', borderRadius: 12, padding: '1rem', marginBottom: '1rem' }}>
+                <div style={{ color: '#6B7280', fontSize: '0.875rem', marginBottom: '0.625rem', fontWeight: 600 }}>Notes</div>
+                <div style={{ color: '#374151', fontSize: '0.875rem', lineHeight: 1.6 }}>
+                  {renderNotes(selectedMilestone.notes)}
                 </div>
               </div>
             )}
