@@ -1388,8 +1388,10 @@ function LifeNoodles() {
     
     const lanes = {};
     
-    // No buffer needed for filleted edges - they don't extend beyond dates
-    const bufferTime = 0; // No time buffer
+    // Buffer to account for MIN_RIBBON_HEIGHT (50px) visual expansion — noodles are
+    // expanded 25px on each side of their raw date, so we need a matching time buffer
+    // to prevent visually-expanded short noodles from overlapping adjacent ones.
+    const bufferTime = (50 / 2) / timeScale; // 25px in time-unit (years)
     
     // Helper to get buffered time range for a milestone
     const getBufferedRange = (milestone) => {
@@ -1529,7 +1531,7 @@ function LifeNoodles() {
       `;
     }
     
-    return { path, startY: rawStartY, endY: rawEndY, x1, x2 };
+    return { path, startY: rawStartY, endY: rawEndY, displayStartY, displayEndY, x1, x2 };
   };
 
   const selectedMilestone = milestones.find(m => m.id === selectedId);
@@ -3267,7 +3269,7 @@ function LifeNoodles() {
               {/* Ribbons */}
               {filteredMilestones.map((milestone, index) => {
                 const lane = milestoneLanes[milestone.id];
-                const { path, startY, endY, x1, x2 } = generateRibbonPath(milestone, lane, totalLanes);
+                const { path, startY, endY, displayStartY, displayEndY, x1, x2 } = generateRibbonPath(milestone, lane, totalLanes);
                 const isHovered = hoveredId === milestone.id;
                 const isSelected = selectedId === milestone.id;
                 
@@ -3395,36 +3397,34 @@ function LifeNoodles() {
                     {/* Interactive edge handles for resizing (only for non-ongoing milestones) */}
                     {!milestone.ongoing && (
                       <>
-                        {/* Always-visible grip dots at edges */}
-                        <rect x={(x1+x2)/2 - 12} y={endY - 2} width={24} height={4} rx={2} fill="rgba(255,255,255,0.45)" style={{ pointerEvents: 'none' }} />
-                        <rect x={(x1+x2)/2 - 12} y={startY - 2} width={24} height={4} rx={2} fill="rgba(255,255,255,0.45)" style={{ pointerEvents: 'none' }} />
+                        {/* Grip bars — visible only when selected, at the visual (displayed) edges */}
+                        {isSelected && (
+                          <>
+                            <rect x={(x1+x2)/2 - 16} y={displayEndY - 3} width={32} height={6} rx={3} fill="rgba(255,255,255,0.92)" style={{ pointerEvents: 'none' }} />
+                            <rect x={(x1+x2)/2 - 16} y={displayStartY - 3} width={32} height={6} rx={3} fill="rgba(255,255,255,0.92)" style={{ pointerEvents: 'none' }} />
+                          </>
+                        )}
 
-                        {/* Top edge handle (end date) */}
+                        {/* End-date hitbox — positioned at the visual top edge */}
                         <rect
                           x={x1}
-                          y={endY - 8}
+                          y={displayEndY - 10}
                           width={x2 - x1}
-                          height={16}
+                          height={20}
                           fill="transparent"
-                          stroke={isHovered ? "rgba(255,255,255,0.5)" : "transparent"}
-                          strokeWidth="2"
-                          strokeDasharray="4,4"
                           style={{ cursor: 'ns-resize', touchAction: 'none' }}
                           onMouseDown={(e) => handleEdgeDragStart(milestone.id, 'end', e)}
                           onTouchStart={(e) => handleEdgeDragStart(milestone.id, 'end', e)}
                           onMouseEnter={(e) => e.stopPropagation()}
                         />
 
-                        {/* Bottom edge handle (start date) */}
+                        {/* Start-date hitbox — positioned at the visual bottom edge */}
                         <rect
                           x={x1}
-                          y={startY - 8}
+                          y={displayStartY - 10}
                           width={x2 - x1}
-                          height={16}
+                          height={20}
                           fill="transparent"
-                          stroke={isHovered ? "rgba(255,255,255,0.5)" : "transparent"}
-                          strokeWidth="2"
-                          strokeDasharray="4,4"
                           style={{ cursor: 'ns-resize', touchAction: 'none' }}
                           onMouseDown={(e) => handleEdgeDragStart(milestone.id, 'start', e)}
                           onTouchStart={(e) => handleEdgeDragStart(milestone.id, 'start', e)}
@@ -3441,8 +3441,8 @@ function LifeNoodles() {
                       
                       // Only show if within the milestone range
                       // With filleted edges, diamonds can appear anywhere in the ribbon
-                      const minY = Math.min(startY, endY);
-                      const maxY = Math.max(startY, endY);
+                      const minY = Math.min(displayStartY, displayEndY);
+                      const maxY = Math.max(displayStartY, displayEndY);
                       
                       if (subEventY >= minY && subEventY <= maxY && subEvent.name) {
                         return (
