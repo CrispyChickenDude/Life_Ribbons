@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Life Noodles</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="manifest" href="manifest.json">
@@ -73,21 +73,33 @@ const INITIAL_MILESTONES = [
 ];
 
 function LifeNoodles() {
-  const [milestones, setMilestones] = useState(INITIAL_MILESTONES);
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  // Load persisted data from localStorage on first render
+  const [milestones, setMilestones] = useState(() => {
+    try {
+      const saved = localStorage.getItem('life-noodles-data');
+      if (saved) { const p = JSON.parse(saved); if (Array.isArray(p.milestones)) return p.milestones; }
+    } catch (e) {}
+    return INITIAL_MILESTONES;
+  });
+  const [categories, setCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('life-noodles-data');
+      if (saved) { const p = JSON.parse(saved); if (p.categories && typeof p.categories === 'object') return p.categories; }
+    } catch (e) {}
+    return DEFAULT_CATEGORIES;
+  });
   const [showForm, setShowForm] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-  const [importErrors, setImportErrors] = useState(null); // {imported: number, errors: [{name, reason}]}
-  const [visibleCategories, setVisibleCategories] = useState(() => Object.keys(categories));
+  const [importErrors, setImportErrors] = useState(null);
+  const [visibleCategories, setVisibleCategories] = useState(() => Object.keys(DEFAULT_CATEGORIES));
   const [editingId, setEditingId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
-  const [draggingEdge, setDraggingEdge] = useState(null); // { milestoneId, edge: 'start' | 'end' }
-  const [dragPosition, setDragPosition] = useState(null); // { y, month, year }
-  const [renamingId, setRenamingId] = useState(null); // ID of milestone being renamed
-  const [renameValue, setRenameValue] = useState(''); // New name value
+  const [draggingEdge, setDraggingEdge] = useState(null);
+  const [dragPosition, setDragPosition] = useState(null); // { y, x, month, year }
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
   const [selectedId, setSelectedId] = useState(null);
-  const [birthYear, setBirthYear] = useState(_cy - 30);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showDataExportMenu, setShowDataExportMenu] = useState(false);
   const [hoveredSubEvent, setHoveredSubEvent] = useState(null);
@@ -101,6 +113,9 @@ function LifeNoodles() {
   const [showMobileDetails, setShowMobileDetails] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showExportSubMenu, setShowExportSubMenu] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [pendingImport, setPendingImport] = useState(null); // { milestones, categories, count }
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
   const timelineRef = useRef(null);
@@ -155,15 +170,26 @@ function LifeNoodles() {
     container.scrollLeft = (container.scrollWidth - container.clientWidth) / 2;
   }, [totalLanes]);
 
+  // Persist data to localStorage whenever milestones or categories change
+  useEffect(() => {
+    try { localStorage.setItem('life-noodles-data', JSON.stringify({ milestones, categories })); } catch (e) {}
+  }, [milestones, categories]);
+
   // Sync visible categories when categories change
   useEffect(() => {
     const categoryKeys = Object.keys(categories);
-    // Add new categories to visible list
     setVisibleCategories(prev => {
       const newCategories = categoryKeys.filter(cat => !prev.includes(cat));
       return [...prev, ...newCategories];
     });
   }, [categories]);
+
+  // Toast notification helper
+  const showToast = (message, type = 'success') => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, message, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
+  };
 
   // Toggle category visibility
   const toggleCategoryFilter = (category) => {
@@ -235,6 +261,18 @@ function LifeNoodles() {
       }
     }
     
+    // Validate sub-events fall within milestone date range
+    const msStart = finalStartYear * 12 + finalStartMonth;
+    const msEnd = formData.ongoing ? Infinity : finalEndYear * 12 + finalEndMonth;
+    for (const se of (formData.subEvents || [])) {
+      if (!se.name || !se.name.trim()) continue;
+      const seDate = (se.year || finalStartYear) * 12 + (se.month || 1);
+      if (seDate < msStart || seDate > msEnd) {
+        setFormError(`Sub-event "${se.name}" date falls outside this milestone's date range.`);
+        return;
+      }
+    }
+
     // Filter out sub-events without names and prepare final data
     const cleanedFormData = {
       ...formData,
@@ -249,17 +287,19 @@ function LifeNoodles() {
     
     try {
       if (editingId) {
-        setMilestones(milestones.map(m => 
+        setMilestones(milestones.map(m =>
           m.id === editingId ? { ...cleanedFormData, id: editingId } : m
         ));
+        showToast('Milestone updated');
       } else {
         const newMilestone = { ...cleanedFormData, id: Date.now() };
         setMilestones([...milestones, newMilestone]);
+        showToast('Milestone added');
       }
       resetForm();
     } catch (error) {
       console.error('Error saving milestone:', error);
-      alert('There was an error saving the milestone. Please try again.');
+      showToast('There was an error saving the milestone. Please try again.', 'error');
     }
   };
 
@@ -274,8 +314,14 @@ function LifeNoodles() {
   };
 
   const handleDelete = (id) => {
-    setMilestones(milestones.filter(m => m.id !== id));
-    if (selectedId === id) setSelectedId(null);
+    setConfirmDeleteId(id);
+  };
+
+  const confirmDelete = () => {
+    setMilestones(prev => prev.filter(m => m.id !== confirmDeleteId));
+    if (selectedId === confirmDeleteId) setSelectedId(null);
+    setConfirmDeleteId(null);
+    showToast('Milestone deleted');
   };
 
   // Sub-event management
@@ -311,11 +357,11 @@ function LifeNoodles() {
   // Category management
   const addCategory = () => {
     if (!newCategoryName.trim()) {
-      alert('Please enter a category name');
+      showToast('Please enter a category name', 'error');
       return;
     }
     if (categories[newCategoryName]) {
-      alert('Category already exists');
+      showToast('Category already exists', 'error');
       return;
     }
     setCategories({
@@ -324,12 +370,13 @@ function LifeNoodles() {
     });
     setNewCategoryName('');
     setNewCategoryColor('#3B82F6');
+    showToast(`Category "${newCategoryName.trim()}" added`);
   };
 
   const deleteCategory = (categoryName) => {
     // Prevent deleting the last category
     if (Object.keys(categories).length === 1) {
-      alert('Cannot delete the last category. You must have at least one category.');
+      showToast('Cannot delete the last category', 'error');
       return;
     }
     
@@ -353,6 +400,7 @@ function LifeNoodles() {
     const newCategories = { ...categories };
     delete newCategories[categoryName];
     setCategories(newCategories);
+    showToast(`Category "${categoryName}" deleted`);
   };
 
   const startEditingCategory = (categoryName) => {
@@ -369,7 +417,7 @@ function LifeNoodles() {
 
   const updateCategory = () => {
     if (!editCategoryName.trim()) {
-      alert('Please enter a category name');
+      showToast('Please enter a category name', 'error');
       return;
     }
 
@@ -377,7 +425,7 @@ function LifeNoodles() {
     
     // Check if name changed and new name already exists
     if (trimmedName !== editingCategory && categories[trimmedName]) {
-      alert('A category with this name already exists');
+      showToast('A category with this name already exists', 'error');
       return;
     }
 
@@ -391,12 +439,10 @@ function LifeNoodles() {
       delete newCategories[editingCategory];
     }
     
-    // Update category with new name and/or color
     newCategories[trimmedName] = editCategoryColor;
     setCategories(newCategories);
-    
-    // Reset editing state
     cancelEditingCategory();
+    showToast(`Category updated`);
   };
 
   const generateRandomColor = () => {
@@ -548,27 +594,19 @@ function LifeNoodles() {
 
   // Odyssey management
 
-  // Helper function to generate filename with format: Ribbons-YYDDMM-HHMM
+  // Helper function to generate filename: LifeNoodles-YYYY-MM-DD
   const getExportFilename = (extension) => {
     const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const dd = String(now.getDate()).padStart(2, '0');
+    const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    return `Ribbons-${yy}${dd}${mm}-${hh}${min}.${extension}`;
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `LifeNoodles-${yyyy}-${mm}-${dd}.${extension}`;
   };
 
   // Export/Import Functions
   const exportData = () => {
     try {
-      // Export as JSON with all data including categories
-      const exportObj = {
-        milestones: milestones,
-        categories: categories,
-        birthYear: birthYear
-      };
-      
+      const exportObj = { milestones, categories };
       const jsonStr = JSON.stringify(exportObj, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -580,9 +618,10 @@ function LifeNoodles() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setShowDataExportMenu(false);
+      showToast('JSON exported successfully');
     } catch (error) {
       console.error('Export error:', error);
-      alert('Error exporting data. Please try again.');
+      showToast('Error exporting data. Please try again.', 'error');
     }
   };
 
@@ -618,10 +657,28 @@ function LifeNoodles() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setShowDataExportMenu(false);
+      showToast('CSV exported successfully');
     } catch (error) {
       console.error('CSV export error:', error);
-      alert('Error exporting CSV. Please try again.');
+      showToast('Error exporting CSV. Please try again.', 'error');
     }
+  };
+
+  const applyImport = (pending, mode) => {
+    if (mode === 'replace') {
+      setMilestones(pending.milestones);
+      setCategories(pending.categories);
+      setVisibleCategories(Object.keys(pending.categories));
+      showToast(`Replaced data: ${pending.milestones.length} milestone(s) imported`);
+    } else {
+      const existingIds = new Set(milestones.map(m => String(m.id)));
+      const newMs = pending.milestones.filter(m => !existingIds.has(String(m.id)));
+      setMilestones([...milestones, ...newMs]);
+      setCategories({...categories, ...pending.categories});
+      setVisibleCategories([...new Set([...visibleCategories, ...Object.keys(pending.categories)])]);
+      showToast(`Merged: ${newMs.length} new milestone(s) added`);
+    }
+    setPendingImport(null);
   };
 
   const importData = (event) => {
@@ -629,7 +686,7 @@ function LifeNoodles() {
     if (!file) return;
 
     if (file.size > MAX_IMPORT_FILE_SIZE) {
-      alert('File is too large. Maximum import size is 1 MB.');
+      showToast('File is too large. Maximum import size is 1 MB.', 'error');
       event.target.value = '';
       return;
     }
@@ -837,16 +894,7 @@ function LifeNoodles() {
           });
           }
           
-          // Update categories if new ones were added
-          if (Object.keys(newCategories).length > Object.keys(categories).length || categoryLines.length > 0) {
-            setCategories(newCategories);
-            // Make all categories visible by default
-            setVisibleCategories(Object.keys(newCategories));
-          }
-          
-          setMilestones(importedMilestones);
-          
-          alert(`CSV data imported successfully! ${importedMilestones.length} milestone(s) imported.`);
+          setPendingImport({ milestones: importedMilestones, categories: newCategories });
         } else {
           // Parse JSON with strict schema validation
           const raw = JSON.parse(content);
@@ -910,37 +958,25 @@ function LifeNoodles() {
             };
           });
 
-          setMilestones(milestonesWithDefaults);
-
-          if (typeof raw.birthYear === 'number' && raw.birthYear >= 1900 && raw.birthYear <= 2100) {
-            setBirthYear(raw.birthYear);
-          }
-
-          // Import categories with hex color validation
+          let importedCategories = {...categories};
           if (raw.categories && typeof raw.categories === 'object' && !Array.isArray(raw.categories)) {
             const safeCategories = {};
             for (const [key, value] of Object.entries(raw.categories)) {
               const safeKey = sanitizeStr(key, 50);
-              if (safeKey && isValidHex(value)) {
-                safeCategories[safeKey] = value;
-              }
+              if (safeKey && isValidHex(value)) safeCategories[safeKey] = value;
             }
-            if (Object.keys(safeCategories).length > 0) {
-              setCategories(safeCategories);
-              setVisibleCategories(Object.keys(safeCategories));
-            }
+            if (Object.keys(safeCategories).length > 0) importedCategories = safeCategories;
           }
-
-          alert(`JSON data imported successfully! ${milestonesWithDefaults.length} milestone(s) imported.`);
+          setPendingImport({ milestones: milestonesWithDefaults, categories: importedCategories });
         }
       } catch (error) {
         console.error('Import error:', error);
-        alert('Error importing file. Please ensure it\'s a valid Life Noodles CSV or JSON file.');
+        showToast('Error importing file. Please ensure it\'s a valid Life Noodles CSV or JSON file.', 'error');
       }
     };
-    
+
     reader.onerror = () => {
-      alert('Error reading file. Please try again.');
+      showToast('Error reading file. Please try again.', 'error');
     };
     
     reader.readAsText(file);
@@ -950,7 +986,7 @@ function LifeNoodles() {
   const exportAsSVG = () => {
     try {
       if (!svgRef.current) {
-        alert('Timeline not ready. Please try again.');
+        showToast('Timeline not ready. Please try again.', 'error');
         return;
       }
       
@@ -985,16 +1021,17 @@ function LifeNoodles() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setShowExportMenu(false);
+      showToast('SVG exported successfully');
     } catch (error) {
       console.error('SVG export error:', error);
-      alert('Error exporting SVG. Please try again.');
+      showToast('Error exporting SVG. Please try again.', 'error');
     }
   };
 
   const exportAsPNG = () => {
     try {
       if (!svgRef.current) {
-        alert('Timeline not ready. Please try again.');
+        showToast('Timeline not ready. Please try again.', 'error');
         return;
       }
       
@@ -1044,7 +1081,7 @@ function LifeNoodles() {
             URL.revokeObjectURL(url); // Clean up the SVG URL
             
             if (!blob) {
-              alert('Error creating PNG. Please try again.');
+              showToast('Error creating PNG. Please try again.', 'error');
               return;
             }
             
@@ -1056,18 +1093,19 @@ function LifeNoodles() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(pngUrl);
+            showToast('PNG exported successfully');
             setShowExportMenu(false);
           }, 'image/png', 1.0);
         } catch (error) {
           console.error('Canvas error:', error);
-          alert('Error creating PNG: ' + error.message);
+          showToast('Error creating PNG: ' + error.message, 'error');
           URL.revokeObjectURL(url);
         }
       };
       
       img.onerror = (e) => {
         console.error('Image load error:', e);
-        alert('Error loading SVG for PNG export. Please try again.');
+        showToast('Error loading SVG for PNG export. Please try again.', 'error');
         URL.revokeObjectURL(url);
       };
       
@@ -1075,7 +1113,7 @@ function LifeNoodles() {
       
     } catch (error) {
       console.error('PNG export error:', error);
-      alert('Error exporting PNG: ' + error.message);
+      showToast('Error exporting PNG: ' + error.message, 'error');
     }
   };
 
@@ -1205,7 +1243,7 @@ function LifeNoodles() {
     const y = svgCoords.y;
     
     const { month, year } = yToDate(y);
-    setDragPosition({ y, month, year });
+    setDragPosition({ y, x: svgCoords.x, month, year });
   };
   
   // Handle edge drag end
@@ -2243,6 +2281,9 @@ function LifeNoodles() {
                   onFocus={(e) => e.target.style.borderColor = '#8B5CF6'}
                   onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
                 />
+                <div style={{ textAlign: 'right', fontSize: '0.75rem', color: formData.name.length > 80 ? '#EF4444' : '#9CA3AF', marginTop: '0.25rem' }}>
+                  {formData.name.length}/100
+                </div>
               </div>
 
               <div>
@@ -2721,7 +2762,7 @@ function LifeNoodles() {
                       fontSize: '1rem',
                       fontFamily: 'inherit'
                     }}
-                    onKeyPress={(e) => {
+                    onKeyDown={(e) => {
                       if (e.key === 'Enter') addCategory();
                     }}
                   />
@@ -2875,7 +2916,7 @@ function LifeNoodles() {
                               fontFamily: 'inherit',
                               fontWeight: 600
                             }}
-                            onKeyPress={(e) => {
+                            onKeyDown={(e) => {
                               if (e.key === 'Enter') updateCategory();
                             }}
                             autoFocus
@@ -3089,30 +3130,34 @@ function LifeNoodles() {
               </defs>
 
               {/* Year labels */}
-              {Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i).map(year => (
+              {Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i).map(year => {
+                const isCurrent = year === _cy;
+                return (
                 <g key={year}>
                   <line
                     x1={isMobile ? 400 - (totalLanes * 80 / 2) - 65 : 0}
                     y1={yearToY(year)}
                     x2={Math.max(750, 400 + (totalLanes * 80 / 2) + 100)}
                     y2={yearToY(year)}
-                    stroke="#E5E7EB"
-                    strokeWidth="1"
-                    strokeDasharray="5,5"
+                    stroke={isCurrent ? '#8B5CF6' : '#E5E7EB'}
+                    strokeWidth={isCurrent ? 2 : 1}
+                    strokeDasharray={isCurrent ? '8,4' : '5,5'}
+                    opacity={isCurrent ? 0.6 : 1}
                   />
                   <text
                     x={isMobile ? 400 - (totalLanes * 80 / 2) - 15 : 30}
                     y={yearToY(year) + 5}
-                    fill="#9CA3AF"
-                    fontSize="14"
+                    fill={isCurrent ? '#8B5CF6' : '#9CA3AF'}
+                    fontSize={isCurrent ? 15 : 14}
                     fontFamily="'Syne', sans-serif"
-                    fontWeight="600"
+                    fontWeight={isCurrent ? '800' : '600'}
                     textAnchor="end"
                   >
-                    {year}
+                    {year}{isCurrent ? ' ←' : ''}
                   </text>
                 </g>
-              ))}
+                );
+              })}
 
               {/* Ribbons */}
               {filteredMilestones.map((milestone, index) => {
@@ -3223,6 +3268,22 @@ function LifeNoodles() {
                         }}
                       >
                         {milestone.name}
+                      </text>
+                    )}
+
+                    {/* Rename hint shown on hover */}
+                    {isHovered && renamingId !== milestone.id && (endY - startY) > 60 && (
+                      <text
+                        x={(x1 + x2) / 2}
+                        y={(startY + endY) / 2 + 18}
+                        fill="rgba(255,255,255,0.7)"
+                        fontSize="9"
+                        fontFamily="'Syne', sans-serif"
+                        textAnchor="middle"
+                        transform={`rotate(-90 ${(x1 + x2) / 2} ${(startY + endY) / 2 + 18})`}
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        ✎ double-click to rename
                       </text>
                     )}
 
@@ -3351,7 +3412,7 @@ function LifeNoodles() {
               {draggingEdge && dragPosition && (
                 <g>
                   <rect
-                    x="50"
+                    x={(dragPosition.x || 120) - 70}
                     y={dragPosition.y - 20}
                     rx="8"
                     ry="8"
@@ -3365,7 +3426,7 @@ function LifeNoodles() {
                     }}
                   />
                   <text
-                    x="120"
+                    x={dragPosition.x || 120}
                     y={dragPosition.y + 4}
                     fill="white"
                     fontSize="14"
@@ -3402,14 +3463,19 @@ function LifeNoodles() {
               marginBottom: '1.5rem'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h3 style={{ 
-                  fontSize: '1.25rem', 
-                  color: '#1F2937',
-                  fontWeight: 700,
-                  margin: 0
-                }}>
-                  Categories
-                </h3>
+                <div>
+                  <h3 style={{
+                    fontSize: '1.25rem',
+                    color: '#1F2937',
+                    fontWeight: 700,
+                    margin: '0 0 0.15rem'
+                  }}>
+                    Categories
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: '#9CA3AF', fontWeight: 500 }}>
+                    {visibleCategories.length} of {Object.keys(categories).length} visible
+                  </span>
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button
                     onClick={toggleAllCategories}
@@ -3777,60 +3843,66 @@ function LifeNoodles() {
       {/* Mobile Floating Action Buttons */}
       <div className="mobile-fab-container">
         {selectedMilestone && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <button
+              onClick={() => setShowMobileDetails(true)}
+              style={{
+                width: 52, height: 52, borderRadius: '50%',
+                background: categories[selectedMilestone.category],
+                border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: `0 4px 20px ${categories[selectedMilestone.category]}80`,
+                color: 'white'
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </button>
+            <span style={{ fontSize: '10px', color: 'white', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)', letterSpacing: '0.02em' }}>Info</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
           <button
-            onClick={() => setShowMobileDetails(true)}
+            onClick={() => setShowMobileCategories(true)}
             style={{
               width: 52, height: 52, borderRadius: '50%',
-              background: categories[selectedMilestone.category],
+              background: '#4F46E5',
               border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 4px 20px ${categories[selectedMilestone.category]}80`,
+              boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
               color: 'white'
             }}
-            title="Milestone Details"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"/>
             </svg>
           </button>
-        )}
-        <button
-          onClick={() => setShowMobileCategories(true)}
-          style={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: '#4F46E5',
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
-            color: 'white'
-          }}
-          title="Categories"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-          </svg>
-        </button>
-        <button
-          onClick={() => setShowMobileActions(true)}
-          style={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: '#4F46E5',
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
-            color: 'white'
-          }}
-          title="Actions"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14"/><path d="M12 5v14"/>
-          </svg>
-        </button>
+          <span style={{ fontSize: '10px', color: 'white', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)', letterSpacing: '0.02em' }}>Tags</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <button
+            onClick={() => setShowMobileActions(true)}
+            style={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: '#4F46E5',
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
+              color: 'white'
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14"/><path d="M12 5v14"/>
+            </svg>
+          </button>
+          <span style={{ fontSize: '10px', color: 'white', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)', letterSpacing: '0.02em' }}>Add</span>
+        </div>
       </div>
 
       {/* Mobile Actions Overlay */}
@@ -4133,8 +4205,9 @@ function LifeNoodles() {
           box-sizing: border-box;
         }
         
-        input:focus, select:focus {
-          outline: none;
+        input:focus, select:focus, textarea:focus {
+          outline: 2px solid #8B5CF6 !important;
+          outline-offset: 2px !important;
         }
 
         /* Custom scrollbar for form */
@@ -4260,7 +4333,65 @@ function LifeNoodles() {
             position: sticky !important;
           }
         }
+
+        /* Respect user motion preferences */
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
       `}</style>
+
+      {/* Toast notifications */}
+      <div style={{ position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center', pointerEvents: 'none' }}>
+        {toasts.map(toast => (
+          <div key={toast.id} style={{ background: toast.type === 'error' ? '#EF4444' : '#10B981', color: 'white', padding: '0.75rem 1.5rem', borderRadius: 12, fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'slideUpPanel 0.3s ease-out', whiteSpace: 'nowrap' }}>
+            {toast.message}
+          </div>
+        ))}
+      </div>
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteId && (
+        <div onClick={() => setConfirmDeleteId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 20, padding: '2rem', maxWidth: 320, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem', fontWeight: 700, color: '#1F2937' }}>Delete milestone?</h3>
+            <p style={{ margin: '0 0 1.5rem', color: '#6B7280', fontSize: '0.9rem' }}>This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button onClick={() => setConfirmDeleteId(null)} style={{ flex: 1, padding: '0.75rem', borderRadius: 12, border: '2px solid #E5E7EB', background: 'white', fontWeight: 600, cursor: 'pointer', color: '#6B7280', fontSize: '0.9rem', fontFamily: "'Syne', sans-serif" }}>Cancel</button>
+              <button onClick={confirmDelete} style={{ flex: 1, padding: '0.75rem', borderRadius: 12, border: 'none', background: '#EF4444', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: "'Syne', sans-serif" }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import replace/merge dialog */}
+      {pendingImport && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: 20, padding: '2rem', maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem', fontWeight: 700, color: '#1F2937', textAlign: 'center' }}>Import {pendingImport.milestones.length} milestone{pendingImport.milestones.length !== 1 ? 's' : ''}</h3>
+            <p style={{ margin: '0 0 1.5rem', color: '#6B7280', fontSize: '0.9rem', textAlign: 'center' }}>Replace all existing data or merge with it?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button onClick={() => applyImport(pendingImport, 'replace')} style={{ padding: '0.875rem', borderRadius: 12, border: '2px solid #EF4444', background: '#FEF2F2', color: '#EF4444', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: "'Syne', sans-serif" }}>Replace all data</button>
+              <button onClick={() => applyImport(pendingImport, 'merge')} style={{ padding: '0.875rem', borderRadius: 12, border: '2px solid #10B981', background: '#F0FDF4', color: '#059669', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: "'Syne', sans-serif" }}>Merge with existing</button>
+              <button onClick={() => setPendingImport(null)} style={{ padding: '0.75rem', borderRadius: 12, border: '2px solid #E5E7EB', background: 'white', color: '#6B7280', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', fontFamily: "'Syne', sans-serif" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
