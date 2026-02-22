@@ -1388,21 +1388,29 @@ function LifeNoodles() {
     
     const lanes = {};
     
-    // Buffer to account for MIN_RIBBON_HEIGHT (50px) visual expansion — noodles are
-    // expanded 25px on each side of their raw date, so we need a matching time buffer
-    // to prevent visually-expanded short noodles from overlapping adjacent ones.
-    const bufferTime = (50 / 2) / timeScale; // 25px in time-unit (years)
-    
-    // Helper to get buffered time range for a milestone
+    // Helper to get the time range for a milestone, including any visual overhang
+    // from MIN_RIBBON_HEIGHT expansion. Only short noodles get a buffer — noodles
+    // already taller than 50px render at their true size and need no buffer at all.
+    const MIN_RIBBON_HEIGHT = 50;
     const getBufferedRange = (milestone) => {
       const mStart = monthToDecimal(milestone.startMonth, milestone.startYear);
-      const mEnd = milestone.ongoing 
+      const mEnd = milestone.ongoing
         ? monthToDecimal(new Date().getMonth() + 1, new Date().getFullYear())
         : monthToDecimal(milestone.endMonth, milestone.endYear);
-      return {
-        start: mStart - bufferTime,
-        end: mEnd + bufferTime
-      };
+
+      let overhangTime = 0;
+      if (!milestone.ongoing) {
+        const rawH = Math.abs(
+          dateToY(milestone.startMonth, milestone.startYear) -
+          dateToY(milestone.endMonth, milestone.endYear)
+        );
+        if (rawH < MIN_RIBBON_HEIGHT) {
+          // Only the actual visual overhang beyond the raw dates
+          overhangTime = (MIN_RIBBON_HEIGHT - rawH) / 2 / timeScale;
+        }
+      }
+
+      return { start: mStart - overhangTime, end: mEnd + overhangTime };
     };
     
     // Sort by start date (oldest first)
