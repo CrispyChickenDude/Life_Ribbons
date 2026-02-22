@@ -1215,7 +1215,10 @@ function LifeNoodles() {
     e.stopPropagation();
     const milestone = milestones.find(m => m.id === milestoneId);
     if (!milestone || milestone.ongoing) return; // Can't drag ongoing milestones
-    
+
+    // Haptic feedback on touch devices (Android; iOS ignores silently)
+    if (e.type === 'touchstart' && navigator.vibrate) navigator.vibrate(30);
+
     setDraggingEdge({ milestoneId, edge });
     
     // Set initial drag position to current edge date
@@ -3246,9 +3249,9 @@ function LifeNoodles() {
                           e.stopPropagation();
                           handleRenameStart(milestone.id, milestone.name, e);
                         }}
-                        style={{ 
+                        style={{
                           transition: 'all 0.3s ease',
-                          pointerEvents: 'all',
+                          pointerEvents: isMobile ? 'none' : 'all',
                           cursor: 'text',
                           textShadow: '0 0 4px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,1), 0 2px 6px rgba(0,0,0,1), 0 4px 8px rgba(0,0,0,0.8)'
                         }}
@@ -3290,7 +3293,7 @@ function LifeNoodles() {
                           stroke={isHovered ? "rgba(255,255,255,0.5)" : "transparent"}
                           strokeWidth="2"
                           strokeDasharray="4,4"
-                          style={{ cursor: 'ns-resize' }}
+                          style={{ cursor: 'ns-resize', touchAction: 'none' }}
                           onMouseDown={(e) => handleEdgeDragStart(milestone.id, 'end', e)}
                           onTouchStart={(e) => handleEdgeDragStart(milestone.id, 'end', e)}
                           onMouseEnter={(e) => e.stopPropagation()}
@@ -3306,7 +3309,7 @@ function LifeNoodles() {
                           stroke={isHovered ? "rgba(255,255,255,0.5)" : "transparent"}
                           strokeWidth="2"
                           strokeDasharray="4,4"
-                          style={{ cursor: 'ns-resize' }}
+                          style={{ cursor: 'ns-resize', touchAction: 'none' }}
                           onMouseDown={(e) => handleEdgeDragStart(milestone.id, 'start', e)}
                           onTouchStart={(e) => handleEdgeDragStart(milestone.id, 'start', e)}
                           onMouseEnter={(e) => e.stopPropagation()}
