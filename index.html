@@ -58,6 +58,8 @@ const DEFAULT_CATEGORIES = {
   Relationship: '#EC4899'    // Pink
 };
 
+const APP_VERSION = 'v1.0.0';
+
 // Security helpers
 const isValidHex = (str) => typeof str === 'string' && /^#[0-9A-Fa-f]{6}$/.test(str);
 const sanitizeStr = (val, maxLen) => typeof val === 'string' ? val.trim().slice(0, maxLen) : '';
@@ -2252,12 +2254,30 @@ function LifeNoodles() {
                 padding: '1rem 1.25rem',
                 background: '#EEF2FF',
                 borderRadius: '12px',
-                border: '2px solid #8B5CF6'
+                border: '2px solid #8B5CF6',
+                marginBottom: '1.25rem'
               }}>
                 <p style={{ margin: 0, color: '#5B21B6', fontWeight: 500 }}>
                   💡 The timeline runs bottom (oldest) to top (newest). The current year is highlighted in purple.
                 </p>
               </div>
+
+              <div style={{
+                padding: '0.875rem 1.25rem',
+                background: '#F9FAFB',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB',
+                marginBottom: '1.5rem'
+              }}>
+                <p style={{ margin: 0, color: '#6B7280', fontSize: '0.875rem', lineHeight: '1.6' }}>
+                  <strong style={{ color: '#374151' }}>Why do short-duration noodles appear longer than they are?</strong><br/>
+                  Very brief milestones (e.g. a single month) would be nearly invisible at timeline scale, so Life Noodles enforces a minimum visible height for every ribbon. A short noodle is expanded equally above and below its true centre point until it reaches that minimum size. Its actual start and end dates are always correct — only the visual representation is padded. You can confirm the real dates by tapping the ribbon to view its details.
+                </p>
+              </div>
+
+              <p style={{ margin: 0, textAlign: 'right', fontSize: '0.75rem', color: '#9CA3AF' }}>
+                {APP_VERSION}
+              </p>
             </div>
           </div>
         </div>
@@ -3241,8 +3261,8 @@ function LifeNoodles() {
           }}>
             {(() => {
               const isMobile = window.innerWidth <= 768;
-              const mobileVBx = 400 - (totalLanes * 80 / 2) - 70;
-              const mobileVBw = Math.max(200, totalLanes * 80 + 90);
+              const mobileVBx = 400 - (totalLanes * 80 / 2) - 130;
+              const mobileVBw = Math.max(320, totalLanes * 80 + 260);
               return (
             <svg
               ref={svgRef}
