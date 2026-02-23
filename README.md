@@ -71,4 +71,4 @@ All data is stored in `localStorage` in your browser. Nothing is sent to any ser
 
 ## License
 
-MIT
+All rights reserved. This project is for personal use only. You may not copy, distribute, modify, or use any part of this code without explicit permission from the author.
