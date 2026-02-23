@@ -1,5 +1,5 @@
-const CACHE_NAME = 'life-noodles-v1';
-const STATIC_CACHE_NAME = 'life-noodles-cdn-v1';
+const CACHE_NAME = 'life-noodles-v2';
+const STATIC_CACHE_NAME = 'life-noodles-cdn-v2';
 
 const APP_SHELL = [
   './',
@@ -53,8 +53,15 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // App shell: cache-first
+  // App shell: network-first so updates are always picked up when online,
+  // cache fallback keeps the app working offline.
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    fetch(event.request)
+      .then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
